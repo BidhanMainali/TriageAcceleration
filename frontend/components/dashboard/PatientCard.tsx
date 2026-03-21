@@ -1,1 +1,0 @@
-// single row — CTAS badge, AI routing

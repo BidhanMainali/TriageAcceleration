@@ -1,1 +1,0 @@
-// live patient status page (polling)

@@ -1,1 +1,0 @@
-// full AI summary + confirm/override
