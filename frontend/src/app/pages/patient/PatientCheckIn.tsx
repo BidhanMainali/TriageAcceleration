@@ -15,6 +15,7 @@ import {
 import { Checkbox } from "../../components/ui/checkbox";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { Link } from "react-router";
+import { api } from "../../lib/api";
 
 const commonSymptoms = [
   "Chest pain",
@@ -69,15 +70,28 @@ export default function PatientCheckIn() {
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    
-    // Simulate AI processing
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    // Generate a patient ID
-    const patientId = `P${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
-    
-    // Navigate to status page with the new patient ID
-    navigate(`/patient/status?id=${patientId}&new=true`);
+    try {
+      const result = await api.submitCheckIn({
+        full_name: formData.fullName,
+        date_of_birth: formData.dateOfBirth,
+        gender: formData.gender,
+        health_number: formData.healthNumber,
+        contact_phone: formData.contactNumber,
+        emergency_contact: formData.emergencyContact || undefined,
+        blood_type: formData.bloodType || undefined,
+        allergies: formData.allergies || undefined,
+        current_medications: formData.currentMedications || undefined,
+        chief_complaint: formData.chiefComplaint,
+        symptoms: formData.symptoms,
+        symptom_details: formData.symptomDetails || undefined,
+      });
+      navigate(`/patient/status?id=${result.patient_id}&new=true`);
+    } catch (err) {
+      console.error("Check-in failed:", err);
+      alert("Check-in failed. Please try again or contact reception.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const canProceedStep1 = formData.fullName && formData.dateOfBirth && formData.gender && formData.healthNumber && formData.contactNumber;

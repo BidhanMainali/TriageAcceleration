@@ -15,7 +15,7 @@ import {
   Search,
   RefreshCw,
 } from "lucide-react";
-import { mockPatients } from "../../data/mockData";
+import { api, QueuePatient } from "../../lib/api";
 
 export default function PatientStatus() {
   const [searchParams] = useSearchParams();
@@ -23,60 +23,64 @@ export default function PatientStatus() {
   const [searchedId, setSearchedId] = useState(searchParams.get("id") || "");
   const [isNewPatient] = useState(searchParams.get("new") === "true");
   const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [patient, setPatient] = useState<QueuePatient | null>(null);
+  const [allPatients, setAllPatients] = useState<QueuePatient[]>([]);
+  const [notFound, setNotFound] = useState(false);
 
-  const patient = mockPatients.find((p) => p.patientId === searchedId);
+  const loadPatient = (id: string) => {
+    if (!id) return;
+    setNotFound(false);
+    api.getQueue().then((queue) => {
+      setAllPatients(queue);
+      const found = queue.find((p) => p.patient_id === id);
+      if (found) {
+        setPatient(found);
+      } else {
+        setPatient(null);
+        setNotFound(true);
+      }
+    }).catch(console.error);
+  };
 
   const handleSearch = () => {
     setSearchedId(patientId);
+    loadPatient(patientId);
   };
 
   const handleRefresh = () => {
     setLastUpdated(new Date());
+    loadPatient(searchedId);
   };
 
   useEffect(() => {
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      setLastUpdated(new Date());
-    }, 30000);
-
-    return () => clearInterval(interval);
+    if (searchedId) loadPatient(searchedId);
   }, []);
 
-  const getQueuePosition = (patientId: string) => {
-    const sortedPatients = [...mockPatients].sort((a, b) => {
-      const severityOrder = { Critical: 0, Urgent: 1, 'Semi-Urgent': 2, 'Non-Urgent': 3 };
-      if (severityOrder[a.triageSeverity] !== severityOrder[b.triageSeverity]) {
-        return severityOrder[a.triageSeverity] - severityOrder[b.triageSeverity];
-      }
-      return new Date(a.arrivalTime).getTime() - new Date(b.arrivalTime).getTime();
-    });
+  useEffect(() => {
+    const interval = setInterval(handleRefresh, 30000);
+    return () => clearInterval(interval);
+  }, [searchedId]);
 
-    return sortedPatients.findIndex((p) => p.patientId === patientId) + 1;
+  const getQueuePosition = (pid: string) => {
+    const idx = allPatients.findIndex((p) => p.patient_id === pid);
+    return idx === -1 ? 0 : idx + 1;
   };
 
   const getEstimatedWaitTime = (position: number, severity: string) => {
-    const baseTime = {
-      'Critical': 5,
-      'Urgent': 15,
-      'Semi-Urgent': 45,
-      'Non-Urgent': 90,
-    }[severity] || 60;
-
-    return baseTime * position;
+    const baseTime: Record<string, number> = {
+      'Critical': 5, 'Urgent': 15, 'Semi-Urgent': 45, 'Non-Urgent': 90,
+    };
+    return (baseTime[severity] ?? 60) * position;
   };
 
-  const getWaitTime = (arrivalTime: string) => {
+  const getWaitTime = (arrivalTime: string | null) => {
+    if (!arrivalTime) return "—";
     const arrival = new Date(arrivalTime);
     const now = new Date();
     const diffMinutes = Math.floor((now.getTime() - arrival.getTime()) / 60000);
     const hours = Math.floor(diffMinutes / 60);
     const minutes = diffMinutes % 60;
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
   };
 
   return (
@@ -105,7 +109,7 @@ export default function PatientStatus() {
                       You have been successfully registered and added to the queue.
                     </p>
                     <p className="text-sm font-medium text-green-900">
-                      Your Patient ID: <span className="font-mono">{patient.patientId}</span>
+                      Your Patient ID: <span className="font-mono">{patient.patient_id}</span>
                     </p>
                     <p className="text-xs text-green-700 mt-1">
                       Please save this ID to check your status later.
@@ -151,7 +155,7 @@ export default function PatientStatus() {
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle>Queue Status for {patient.fullName}</CardTitle>
+                    <CardTitle>Queue Status for {patient.full_name}</CardTitle>
                     <Button variant="outline" size="sm" onClick={handleRefresh}>
                       <RefreshCw className="size-4 mr-2" />
                       Refresh
@@ -196,22 +200,22 @@ export default function PatientStatus() {
                       <span className="text-sm font-medium text-slate-700">Triage Priority</span>
                       <Badge
                         variant={
-                          patient.triageSeverity === 'Critical'
+                          patient.triage_severity === 'Critical'
                             ? 'destructive'
-                            : patient.triageSeverity === 'Urgent'
+                            : patient.triage_severity === 'Urgent'
                             ? 'default'
                             : 'secondary'
                         }
                       >
-                        {patient.triageSeverity}
+                        {patient.triage_severity}
                       </Badge>
                     </div>
                     <p className="text-sm text-slate-600">
-                      {patient.triageSeverity === 'Critical' && 
+                      {patient.triage_severity === 'Critical' &&
                         'You will be seen immediately by our medical team.'}
-                      {patient.triageSeverity === 'Urgent' && 
+                      {patient.triage_severity === 'Urgent' &&
                         'You will be seen as soon as possible. This is a high priority case.'}
-                      {patient.triageSeverity === 'Semi-Urgent' && 
+                      {patient.triage_severity === 'Semi-Urgent' &&
                         'You will be seen in order of arrival within your priority level.'}
                     </p>
                   </div>
@@ -224,12 +228,12 @@ export default function PatientStatus() {
                         <div>
                           <h4 className="font-semibold text-slate-900">Your Position in Queue</h4>
                           <p className="text-3xl font-bold text-blue-600 mt-1">
-                            #{getQueuePosition(patient.patientId)}
+                            #{getQueuePosition(patient.patient_id)}
                           </p>
                         </div>
                       </div>
-                      <Progress 
-                        value={Math.max(0, 100 - (getQueuePosition(patient.patientId) * 10))} 
+                      <Progress
+                        value={Math.max(0, 100 - (getQueuePosition(patient.patient_id) * 10))}
                         className="h-2"
                       />
                     </div>
@@ -243,10 +247,10 @@ export default function PatientStatus() {
                         <span className="text-sm font-medium text-slate-700">Time Waiting</span>
                       </div>
                       <p className="text-2xl font-bold text-slate-900">
-                        {getWaitTime(patient.arrivalTime)}
+                        {getWaitTime(patient.arrival_time)}
                       </p>
                       <p className="text-xs text-slate-600 mt-1">
-                        Since {new Date(patient.arrivalTime).toLocaleTimeString()}
+                        {patient.arrival_time && `Since ${new Date(patient.arrival_time).toLocaleTimeString()}`}
                       </p>
                     </div>
 
@@ -257,7 +261,7 @@ export default function PatientStatus() {
                           <span className="text-sm font-medium text-slate-700">Estimated Wait</span>
                         </div>
                         <p className="text-2xl font-bold text-slate-900">
-                          ~{getEstimatedWaitTime(getQueuePosition(patient.patientId), patient.triageSeverity)} min
+                          ~{getEstimatedWaitTime(getQueuePosition(patient.patient_id), patient.triage_severity)} min
                         </p>
                         <p className="text-xs text-slate-600 mt-1">
                           Approximate time remaining
@@ -270,12 +274,12 @@ export default function PatientStatus() {
                   <div className="bg-slate-50 p-4 rounded-lg space-y-2">
                     <div>
                       <span className="text-sm font-medium text-slate-700">Assigned Department:</span>
-                      <p className="text-slate-900">{patient.assignedDepartment}</p>
+                      <p className="text-slate-900">{patient.assigned_department ?? '—'}</p>
                     </div>
-                    {patient.assignedDoctor && (
+                    {patient.assigned_doctor && (
                       <div>
                         <span className="text-sm font-medium text-slate-700">Assigned Doctor:</span>
-                        <p className="text-slate-900">{patient.assignedDoctor}</p>
+                        <p className="text-slate-900">{patient.assigned_doctor}</p>
                       </div>
                     )}
                   </div>
@@ -303,7 +307,7 @@ export default function PatientStatus() {
           )}
 
           {/* Not Found Message */}
-          {searchedId && !patient && (
+          {searchedId && notFound && (
             <Card className="border-red-300 bg-red-50">
               <CardContent className="py-12 text-center">
                 <AlertCircle className="size-12 text-red-600 mx-auto mb-3" />
