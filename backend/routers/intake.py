@@ -59,18 +59,21 @@ def intake(patient_in: PatientIn):
             ),
         )
 
+        dept_scores_json = json.dumps(result.get("department_scores", []))
+
         routing_id = str(uuid.uuid4())
         db.execute(
             """
             INSERT INTO routing_decisions
               (id, patient_id, recommended_dept_id, recommended_doctor_id,
-               ai_reasoning, confidence)
-            VALUES (?, ?, ?, ?, ?, ?)
+               ai_reasoning, confidence, department_scores)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 routing_id, patient_id, dept_id, doctor_id,
                 result.get("ai_reasoning", ""),
                 float(result.get("confidence", 0.0)),
+                dept_scores_json,
             ),
         )
 

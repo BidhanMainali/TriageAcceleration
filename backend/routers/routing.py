@@ -1,7 +1,17 @@
 import uuid
+import json
 from fastapi import APIRouter, HTTPException
 from models import RouteConfirmIn, RoutingDecisionOut
 from database import get_db
+
+
+def _parse_routing_row(row) -> dict:
+    """Convert a routing_decisions DB row to a dict with parsed fields."""
+    r = dict(row)
+    r["confirmed"] = bool(r["confirmed"])
+    if r.get("department_scores"):
+        r["department_scores"] = json.loads(r["department_scores"])
+    return r
 
 router = APIRouter()
 
@@ -21,9 +31,7 @@ def get_routing(patient_id: str):
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="No routing decision found")
-        r = dict(row)
-        r["confirmed"] = bool(r["confirmed"])
-        return r
+        return _parse_routing_row(row)
     finally:
         db.close()
 
@@ -80,13 +88,10 @@ def confirm_route(route_in: RouteConfirmIn):
 
         db.commit()
 
-        updated = dict(
-            db.execute(
-                "SELECT * FROM routing_decisions WHERE id = ?", (routing["id"],)
-            ).fetchone()
-        )
-        updated["confirmed"] = bool(updated["confirmed"])
-        return updated
+        updated_row = db.execute(
+            "SELECT * FROM routing_decisions WHERE id = ?", (routing["id"],)
+        ).fetchone()
+        return _parse_routing_row(updated_row)
 
     finally:
         db.close()
