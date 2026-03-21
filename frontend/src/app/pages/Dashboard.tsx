@@ -1,18 +1,64 @@
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { mockPatients, mockDoctors } from "../data/mockData";
-import { Users, Clock, AlertTriangle, Activity, ArrowRight } from "lucide-react";
+import { Users, Clock, AlertTriangle, Activity, ArrowRight, Loader2 } from "lucide-react";
 import { Link } from "react-router";
+import { getPatients, getDepartments, getStaff, type PatientRecord } from "../../lib/api";
+
+const CTAS_LABELS: Record<number, string> = {
+  1: "Resuscitation",
+  2: "Emergent",
+  3: "Urgent",
+  4: "Less Urgent",
+  5: "Non-Urgent",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  waiting: "Waiting",
+  routed: "Routed",
+  in_progress: "In Progress",
+  discharged: "Discharged",
+};
 
 export default function Dashboard() {
-  const criticalPatients = mockPatients.filter(p => p.triageSeverity === 'Critical');
-  const urgentPatients = mockPatients.filter(p => p.triageSeverity === 'Urgent');
-  const waitingPatients = mockPatients.filter(p => p.status === 'Waiting');
-  const inProgressPatients = mockPatients.filter(p => p.status === 'In Progress');
+  const [patients, setPatients] = useState<PatientRecord[]>([]);
+  const [deptMap, setDeptMap] = useState<Record<string, string>>({});
+  const [staffMap, setStaffMap] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
 
-  const currentDoctor = mockDoctors[0]; // Dr. Sarah Chen
-  const myPatients = mockPatients.filter(p => p.assignedDoctor === currentDoctor.name);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [patientsData, depts, staff] = await Promise.all([
+          getPatients(),
+          getDepartments(),
+          getStaff(),
+        ]);
+        setPatients(patientsData);
+        setDeptMap(Object.fromEntries(depts.map((d: { id: string; name: string }) => [d.id, d.name])));
+        setStaffMap(Object.fromEntries(staff.map((s: { id: string; name: string }) => [s.id, s.name])));
+      } catch (err) {
+        console.error("Failed to load dashboard:", err);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const criticalPatients = patients.filter(p => p.ctas_level === 1);
+  const waitingPatients = patients.filter(p => p.status === "waiting");
+  const inProgressPatients = patients.filter(p => p.status === "in_progress");
+  // "My patients" = assigned to doc-chen (Dr. Sarah Chen) as a demo default
+  const myPatients = patients.filter(p => p.assigned_doctor_id === "doc-chen");
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-24">
+        <Loader2 className="size-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -24,7 +70,7 @@ export default function Dashboard() {
             <Users className="size-4 text-slate-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockPatients.length}</div>
+            <div className="text-2xl font-bold">{patients.length}</div>
             <p className="text-xs text-slate-600 mt-1">In emergency department</p>
           </CardContent>
         </Card>
@@ -53,12 +99,12 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">My Patients</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-600">In Progress</CardTitle>
             <Activity className="size-4 text-slate-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{myPatients.length}</div>
-            <p className="text-xs text-slate-600 mt-1">Assigned to you</p>
+            <div className="text-2xl font-bold">{inProgressPatients.length}</div>
+            <p className="text-xs text-slate-600 mt-1">Currently being seen</p>
           </CardContent>
         </Card>
       </div>
@@ -74,23 +120,26 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="space-y-3">
             {criticalPatients.map((patient) => (
-              <div
-                key={patient.patientId}
-                className="bg-white p-4 rounded-lg border border-red-200"
-              >
+              <div key={patient.id} className="bg-white p-4 rounded-lg border border-red-200">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
                     <div className="flex items-center gap-3">
-                      <h3 className="font-semibold text-slate-900">{patient.fullName}</h3>
-                      <Badge variant="destructive">Critical</Badge>
-                      <span className="text-sm text-slate-600">#{patient.patientId}</span>
+                      <h3 className="font-semibold text-slate-900">{patient.name}</h3>
+                      <Badge variant="destructive">CTAS 1 — Resuscitation</Badge>
                     </div>
-                    <p className="text-sm text-slate-700 font-medium">{patient.chiefComplaint}</p>
+                    {patient.ai_summary && (
+                      <p className="text-sm text-slate-700">{patient.ai_summary}</p>
+                    )}
                     <p className="text-sm text-slate-600">
-                      Assigned: {patient.assignedDepartment} - {patient.assignedDoctor}
+                      {patient.department_id && deptMap[patient.department_id] && (
+                        <span>{deptMap[patient.department_id]}</span>
+                      )}
+                      {patient.assigned_doctor_id && staffMap[patient.assigned_doctor_id] && (
+                        <span> — {staffMap[patient.assigned_doctor_id]}</span>
+                      )}
                     </p>
                   </div>
-                  <Link to={`/patient/${patient.patientId}`}>
+                  <Link to={`/patient/${patient.id}`}>
                     <Button size="sm">
                       View Details
                       <ArrowRight className="size-4 ml-2" />
@@ -112,42 +161,35 @@ export default function Dashboard() {
           <div className="space-y-3">
             {myPatients.map((patient) => (
               <div
-                key={patient.patientId}
+                key={patient.id}
                 className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold text-slate-900">{patient.fullName}</h3>
-                      <Badge
-                        variant={
-                          patient.triageSeverity === 'Critical'
-                            ? 'destructive'
-                            : patient.triageSeverity === 'Urgent'
-                            ? 'default'
-                            : 'secondary'
-                        }
-                      >
-                        {patient.triageSeverity}
-                      </Badge>
-                      <Badge variant="outline">{patient.status}</Badge>
-                      <span className="text-sm text-slate-600">
-                        Age: {patient.age} | {patient.gender}
-                      </span>
+                      <h3 className="font-semibold text-slate-900">{patient.name}</h3>
+                      {patient.ctas_level && (
+                        <Badge variant={patient.ctas_level <= 2 ? "destructive" : patient.ctas_level === 3 ? "default" : "secondary"}>
+                          CTAS {patient.ctas_level} — {CTAS_LABELS[patient.ctas_level]}
+                        </Badge>
+                      )}
+                      <Badge variant="outline">{STATUS_LABELS[patient.status] ?? patient.status}</Badge>
+                      {patient.age && (
+                        <span className="text-sm text-slate-600">
+                          Age: {patient.age}{patient.gender ? ` | ${patient.gender}` : ""}
+                        </span>
+                      )}
                     </div>
-                    <p className="text-sm text-slate-700 mb-1">
-                      <span className="font-medium">Chief Complaint:</span> {patient.chiefComplaint}
-                    </p>
+                    {patient.ai_summary && (
+                      <p className="text-sm text-slate-700 mb-1">{patient.ai_summary}</p>
+                    )}
                     <p className="text-sm text-slate-600">
-                      <span className="font-medium">Arrival:</span>{" "}
-                      {new Date(patient.arrivalTime).toLocaleTimeString()} | 
-                      <span className="font-medium"> Patient ID:</span> {patient.patientId}
+                      <span className="font-medium">Arrived:</span>{" "}
+                      {new Date(patient.created_at).toLocaleTimeString()}
                     </p>
                   </div>
-                  <Link to={`/patient/${patient.patientId}`}>
-                    <Button variant="outline">
-                      View Details
-                    </Button>
+                  <Link to={`/patient/${patient.id}`}>
+                    <Button variant="outline">View Details</Button>
                   </Link>
                 </div>
               </div>
@@ -161,26 +203,25 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Department Overview */}
+      {/* Department Staff Overview */}
       <Card>
         <CardHeader>
           <CardTitle>Department Staff Overview</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {mockDoctors.map((doctor) => (
-              <div
-                key={doctor.id}
-                className="p-4 border border-slate-200 rounded-lg"
-              >
-                <h3 className="font-semibold text-slate-900 mb-1">{doctor.name}</h3>
-                <p className="text-sm text-slate-600 mb-2">{doctor.specialization}</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-600">{doctor.department}</span>
-                  <Badge variant="secondary">{doctor.assignedPatients} patients</Badge>
+            {Object.entries(deptMap).map(([id, name]) => {
+              const deptPatients = patients.filter(p => p.department_id === id);
+              return (
+                <div key={id} className="p-4 border border-slate-200 rounded-lg">
+                  <h3 className="font-semibold text-slate-900 mb-1">{name}</h3>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-sm text-slate-600">Patients</span>
+                    <Badge variant="secondary">{deptPatients.length}</Badge>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>

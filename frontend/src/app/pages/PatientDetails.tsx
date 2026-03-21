@@ -1,38 +1,118 @@
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { mockPatients } from "../data/mockData";
 import {
   ArrowLeft,
   User,
-  Phone,
-  Calendar,
-  Activity,
-  Heart,
-  Thermometer,
-  Wind,
-  Droplet,
   AlertCircle,
-  FileText,
-  Pill,
-  AlertTriangle,
   Clock,
   Stethoscope,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
+import {
+  getPatient,
+  getDepartments,
+  getStaff,
+  type PatientRecord,
+} from "../../lib/api";
+
+const CTAS_LABELS: Record<number, string> = {
+  1: "Resuscitation",
+  2: "Emergent",
+  3: "Urgent",
+  4: "Less Urgent",
+  5: "Non-Urgent",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  waiting: "Waiting",
+  routed: "Routed",
+  in_progress: "In Progress",
+  discharged: "Discharged",
+};
+
+function ctasBadgeVariant(
+  level: number | null,
+): "destructive" | "default" | "secondary" | "outline" {
+  if (!level) return "outline";
+  if (level <= 2) return "destructive";
+  if (level === 3) return "default";
+  return "secondary";
+}
 
 export default function PatientDetails() {
   const { patientId } = useParams();
-  const patient = mockPatients.find((p) => p.patientId === patientId);
+  const [patient, setPatient] = useState<PatientRecord | null>(null);
+  const [deptName, setDeptName] = useState<string | null>(null);
+  const [doctorName, setDoctorName] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-  if (!patient) {
+  useEffect(() => {
+    if (!patientId) return;
+    (async () => {
+      try {
+        const p = await getPatient(patientId);
+        setPatient(p);
+        const [depts, staff] = await Promise.all([
+          getDepartments(),
+          getStaff(),
+        ]);
+        if (p.department_id) {
+          const dept = depts.find(
+            (d: { id: string; name: string }) => d.id === p.department_id,
+          );
+          setDeptName(dept?.name ?? p.department_id);
+        }
+        if (p.assigned_doctor_id) {
+          const doc = staff.find(
+            (s: { id: string; name: string }) => s.id === p.assigned_doctor_id,
+          );
+          setDoctorName(doc?.name ?? p.assigned_doctor_id);
+        }
+      } catch {
+        setNotFound(true);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [patientId]);
+
+  const getWaitTime = (createdAt: string) => {
+    const arrival = new Date(createdAt);
+    const now = new Date();
+    const diffMinutes = Math.floor((now.getTime() - arrival.getTime()) / 60000);
+    const hours = Math.floor(diffMinutes / 60);
+    const minutes = diffMinutes % 60;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-24">
+        <Loader2 className="size-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (notFound || !patient) {
     return (
       <div className="max-w-4xl mx-auto">
         <Card>
           <CardContent className="py-12 text-center">
             <AlertCircle className="size-12 text-slate-400 mx-auto mb-3" />
-            <h3 className="font-semibold text-slate-900 mb-1">Patient not found</h3>
+            <h3 className="font-semibold text-slate-900 mb-1">
+              Patient not found
+            </h3>
             <p className="text-slate-600 mb-4">
               The patient with ID {patientId} could not be found.
             </p>
@@ -48,31 +128,16 @@ export default function PatientDetails() {
     );
   }
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'Critical':
-        return 'destructive';
-      case 'Urgent':
-        return 'default';
-      case 'Semi-Urgent':
-        return 'secondary';
-      default:
-        return 'outline';
-    }
-  };
-
-  const getWaitTime = (arrivalTime: string) => {
-    const arrival = new Date(arrivalTime);
-    const now = new Date();
-    const diffMinutes = Math.floor((now.getTime() - arrival.getTime()) / 60000);
-    const hours = Math.floor(diffMinutes / 60);
-    const minutes = diffMinutes % 60;
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
-  };
+  const structured = patient.structured_symptoms as Record<
+    string,
+    unknown
+  > | null;
+  const chiefComplaint = structured?.chief_complaint as string | undefined;
+  const symptoms = structured?.symptoms as string[] | undefined;
+  const relevantHistory = structured?.relevant_history as string | undefined;
+  const severityIndicators = structured?.severity_indicators as
+    | string[]
+    | undefined;
 
   return (
     <div className="space-y-6">
@@ -87,56 +152,70 @@ export default function PatientDetails() {
           </Link>
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-2xl font-semibold text-slate-900">{patient.fullName}</h1>
-              <Badge variant={getSeverityColor(patient.triageSeverity)}>
-                {patient.triageSeverity}
+              <h1 className="text-2xl font-semibold text-slate-900">
+                {patient.name}
+              </h1>
+              {patient.ctas_level && (
+                <Badge variant={ctasBadgeVariant(patient.ctas_level)}>
+                  CTAS {patient.ctas_level} — {CTAS_LABELS[patient.ctas_level]}
+                </Badge>
+              )}
+              <Badge variant="outline">
+                {STATUS_LABELS[patient.status] ?? patient.status}
               </Badge>
-              <Badge variant="outline">{patient.status}</Badge>
             </div>
-            <p className="text-slate-600">Patient ID: {patient.patientId}</p>
+            <p className="text-slate-600 text-sm font-mono">ID: {patient.id}</p>
           </div>
         </div>
       </div>
 
-      {/* Alert Banner */}
-      {patient.triageSeverity === 'Critical' && (
+      {/* Critical Alert */}
+      {patient.ctas_level === 1 && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-start gap-3">
             <AlertTriangle className="size-5 text-red-600 mt-0.5" />
             <div>
-              <h3 className="font-semibold text-red-900 mb-1">Critical Patient - Immediate Attention Required</h3>
-              <p className="text-sm text-red-800">{patient.chiefComplaint}</p>
+              <h3 className="font-semibold text-red-900 mb-1">
+                Critical Patient — Immediate Attention Required
+              </h3>
+              {chiefComplaint && (
+                <p className="text-sm text-red-800">{chiefComplaint}</p>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* AI Summary Card */}
-      <Card className="border-blue-200 bg-blue-50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <div className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded">
-              AI SUMMARY
-            </div>
-            Clinical Assessment
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-slate-700">{patient.aiSummary}</p>
-          <div className="flex items-center gap-4 pt-2 border-t border-blue-200">
-            <div className="flex items-center gap-2">
-              <Stethoscope className="size-4 text-blue-700" />
-              <span className="text-sm font-medium text-slate-700">Recommended Specialist:</span>
-              <Badge variant="default">{patient.recommendedSpecialist}</Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* AI Summary */}
+      {patient.ai_summary && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <div className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded">
+                AI SUMMARY
+              </div>
+              Clinical Assessment
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-slate-700">{patient.ai_summary}</p>
+            {deptName && (
+              <div className="flex items-center gap-2 pt-3 mt-3 border-t border-blue-200">
+                <Stethoscope className="size-4 text-blue-700" />
+                <span className="text-sm font-medium text-slate-700">
+                  Recommended Department:
+                </span>
+                <Badge>{deptName}</Badge>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Patient Info & Vitals */}
+        {/* Left Column */}
         <div className="space-y-6">
-          {/* Demographics */}
+          {/* Patient Info */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -145,89 +224,28 @@ export default function PatientDetails() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div>
-                <p className="text-sm text-slate-600">Health Number</p>
-                <p className="font-medium text-slate-900">{patient.healthNumber}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-600">Date of Birth</p>
-                <p className="font-medium text-slate-900">
-                  {new Date(patient.dateOfBirth).toLocaleDateString()} ({patient.age} years)
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-600">Gender</p>
-                <p className="font-medium text-slate-900">{patient.gender}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-600">Blood Type</p>
-                <p className="font-medium text-slate-900">{patient.bloodType}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-600">Contact</p>
-                <p className="font-medium text-slate-900">{patient.contactNumber}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-600">Emergency Contact</p>
-                <p className="font-medium text-slate-900">{patient.emergencyContact}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Vital Signs */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="size-5" />
-                Vital Signs
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Heart className="size-5 text-red-500" />
-                  <span className="text-sm text-slate-600">Blood Pressure</span>
+              {patient.health_number && (
+                <div>
+                  <p className="text-sm text-slate-600">Health Number</p>
+                  <p className="font-medium text-slate-900">
+                    {patient.health_number}
+                  </p>
                 </div>
-                <span className="font-semibold text-slate-900">
-                  {patient.vitalSigns.bloodPressure}
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Activity className="size-5 text-pink-500" />
-                  <span className="text-sm text-slate-600">Heart Rate</span>
+              )}
+              {patient.age && (
+                <div>
+                  <p className="text-sm text-slate-600">Age</p>
+                  <p className="font-medium text-slate-900">
+                    {patient.age} years
+                  </p>
                 </div>
-                <span className="font-semibold text-slate-900">
-                  {patient.vitalSigns.heartRate} bpm
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Thermometer className="size-5 text-orange-500" />
-                  <span className="text-sm text-slate-600">Temperature</span>
+              )}
+              {patient.gender && (
+                <div>
+                  <p className="text-sm text-slate-600">Gender</p>
+                  <p className="font-medium text-slate-900">{patient.gender}</p>
                 </div>
-                <span className="font-semibold text-slate-900">
-                  {patient.vitalSigns.temperature}°C
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Wind className="size-5 text-blue-500" />
-                  <span className="text-sm text-slate-600">Respiratory Rate</span>
-                </div>
-                <span className="font-semibold text-slate-900">
-                  {patient.vitalSigns.respiratoryRate} /min
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Droplet className="size-5 text-cyan-500" />
-                  <span className="text-sm text-slate-600">O₂ Saturation</span>
-                </div>
-                <span className="font-semibold text-slate-900">
-                  {patient.vitalSigns.oxygenSaturation}%
-                </span>
-              </div>
+              )}
             </CardContent>
           </Card>
 
@@ -243,155 +261,93 @@ export default function PatientDetails() {
               <div>
                 <p className="text-sm text-slate-600">Arrival Time</p>
                 <p className="font-medium text-slate-900">
-                  {new Date(patient.arrivalTime).toLocaleString()}
+                  {new Date(patient.created_at).toLocaleString()}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-slate-600">Wait Time</p>
-                <p className="font-medium text-slate-900">{getWaitTime(patient.arrivalTime)}</p>
+                <p className="font-medium text-slate-900">
+                  {getWaitTime(patient.created_at)}
+                </p>
               </div>
-              <div>
-                <p className="text-sm text-slate-600">Assigned Department</p>
-                <p className="font-medium text-slate-900">{patient.assignedDepartment}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-600">Assigned Doctor</p>
-                <p className="font-medium text-slate-900">{patient.assignedDoctor}</p>
-              </div>
+              {deptName && (
+                <div>
+                  <p className="text-sm text-slate-600">Assigned Department</p>
+                  <p className="font-medium text-slate-900">{deptName}</p>
+                </div>
+              )}
+              {doctorName && (
+                <div>
+                  <p className="text-sm text-slate-600">Assigned Doctor</p>
+                  <p className="font-medium text-slate-900">{doctorName}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Right Column - Medical Details */}
-        <div className="lg:col-span-2">
-          <Tabs defaultValue="current" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="current">Current Visit</TabsTrigger>
-              <TabsTrigger value="history">Medical History</TabsTrigger>
-              <TabsTrigger value="medications">Medications</TabsTrigger>
-              <TabsTrigger value="allergies">Allergies</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="current" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Chief Complaint</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-slate-900 font-medium mb-4">{patient.chiefComplaint}</p>
-                  <div>
-                    <h4 className="text-sm font-medium text-slate-700 mb-2">Reported Symptoms:</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {patient.symptoms.map((symptom, idx) => (
-                        <Badge key={idx} variant="secondary">
-                          {symptom}
-                        </Badge>
-                      ))}
-                    </div>
+        {/* Right Column */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Current Visit */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Current Visit</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {chiefComplaint && (
+                <div>
+                  <p className="text-sm text-slate-600 mb-1">Chief Complaint</p>
+                  <p className="font-medium text-slate-900">{chiefComplaint}</p>
+                </div>
+              )}
+              {symptoms && symptoms.length > 0 && (
+                <div>
+                  <p className="text-sm text-slate-600 mb-2">
+                    Reported Symptoms
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {symptoms.map((s, i) => (
+                      <Badge key={i} variant="secondary">
+                        {s}
+                      </Badge>
+                    ))}
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                </div>
+              )}
+              {severityIndicators && severityIndicators.length > 0 && (
+                <div>
+                  <p className="text-sm text-slate-600 mb-2">
+                    Severity Indicators
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {severityIndicators.map((s, i) => (
+                      <Badge key={i} variant="destructive">
+                        {s}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!chiefComplaint && patient.raw_symptoms && (
+                <div>
+                  <p className="text-sm text-slate-600 mb-1">Raw Symptoms</p>
+                  <p className="text-slate-900">{patient.raw_symptoms}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-            <TabsContent value="history" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="size-5" />
-                    Medical History
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {patient.medicalHistory.length > 0 ? (
-                    <div className="space-y-4">
-                      {patient.medicalHistory.map((entry, idx) => (
-                        <div
-                          key={idx}
-                          className="border-l-4 border-blue-500 pl-4 py-2 bg-slate-50 rounded-r-lg"
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <h4 className="font-semibold text-slate-900">{entry.condition}</h4>
-                            <span className="text-sm text-slate-600">
-                              {new Date(entry.date).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <p className="text-sm text-slate-700 mb-1">
-                            <span className="font-medium">Treatment:</span> {entry.treatment}
-                          </p>
-                          <p className="text-sm text-slate-700 mb-1">
-                            <span className="font-medium">Provider:</span> {entry.doctor}
-                          </p>
-                          <p className="text-sm text-slate-600">{entry.notes}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-slate-600 text-center py-8">No medical history on record</p>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="medications" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Pill className="size-5" />
-                    Current Medications
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {patient.currentMedications.length > 0 ? (
-                    <div className="space-y-2">
-                      {patient.currentMedications.map((medication, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg"
-                        >
-                          <div className="size-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                            <Pill className="size-5 text-blue-700" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-medium text-slate-900">{medication}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-slate-600 text-center py-8">No current medications</p>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="allergies" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <AlertTriangle className="size-5 text-red-500" />
-                    Known Allergies
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {patient.allergies.length > 0 ? (
-                    <div className="space-y-2">
-                      {patient.allergies.map((allergy, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg"
-                        >
-                          <AlertTriangle className="size-5 text-red-600" />
-                          <p className="font-medium text-red-900">{allergy}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-slate-600 text-center py-8">No known allergies</p>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+          {/* Medical History */}
+          {relevantHistory && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Relevant Medical History</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-slate-700">{relevantHistory}</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
