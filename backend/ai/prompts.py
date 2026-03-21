@@ -1,0 +1,1 @@
+# all prompt templates in one place

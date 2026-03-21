@@ -1,0 +1,1 @@
+// root redirect → /intake or /dashboard

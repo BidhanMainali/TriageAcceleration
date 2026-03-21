@@ -1,0 +1,1 @@
+# stage 1 — free text → structured data
