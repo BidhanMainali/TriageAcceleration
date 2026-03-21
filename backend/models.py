@@ -43,6 +43,12 @@ class PatientOut(BaseModel):
     created_at: str
 
 
+class DepartmentScore(BaseModel):
+    department_id: str
+    score: float
+    reasoning: str
+
+
 class RoutingDecisionOut(BaseModel):
     id: str
     patient_id: str
@@ -50,6 +56,7 @@ class RoutingDecisionOut(BaseModel):
     recommended_doctor_id: Optional[str] = None
     ai_reasoning: Optional[str] = None
     confidence: Optional[float] = None
+    department_scores: Optional[List[DepartmentScore]] = None
     confirmed: bool
     override_dept_id: Optional[str] = None
     override_doctor_id: Optional[str] = None

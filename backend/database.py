@@ -55,11 +55,20 @@ def init_db():
             recommended_doctor_id TEXT,
             ai_reasoning TEXT,
             confidence REAL,
+            department_scores TEXT,
             confirmed INTEGER DEFAULT 0,
             override_dept_id TEXT,
             override_doctor_id TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
     """)
+
+    # Migration for existing DBs
+    try:
+        cur.execute("ALTER TABLE routing_decisions ADD COLUMN department_scores TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     conn.commit()
     conn.close()

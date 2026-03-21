@@ -45,8 +45,14 @@ Return a JSON object with exactly these fields:
   "recommended_doctor_id": "<exact doctor id from the list above, or null>",
   "ai_reasoning": "clinical reasoning for this routing decision",
   "confidence": <float 0.0-1.0>,
-  "clinical_summary": "concise hospital-standard summary for the receiving department (2-4 sentences)"
+  "clinical_summary": "concise hospital-standard summary for the receiving department (2-4 sentences)",
+  "department_scores": [
+    {{"department_id": "<exact dept id>", "score": <float 0.0-1.0>, "reasoning": "one-line clinical reasoning for this department"}},
+    ...
+  ]
 }}
+
+IMPORTANT: department_scores MUST include an entry for EVERY department listed above, scored 0.0-1.0 based on clinical relevance. The highest-scored department should match recommended_department_id.
 
 CTAS Level Reference:
 1 = Resuscitation — immediate life threat, requires immediate intervention

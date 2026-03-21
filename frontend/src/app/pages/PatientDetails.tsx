@@ -1,120 +1,101 @@
-import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/card";
+import { useState, useEffect } from "react";
+import { useParams, Link, useNavigate } from "react-router";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import RoutingDecisionPanel from "../components/RoutingDecisionPanel";
+import {
+  getPatient,
+  getRouting,
+  getDepartments,
+  type PatientRecord,
+  type RoutingDecision,
+  type Department,
+} from "../../lib/api";
 import {
   ArrowLeft,
   User,
-  AlertCircle,
   Clock,
-  Stethoscope,
+  AlertCircle,
   AlertTriangle,
+  Stethoscope,
   Loader2,
 } from "lucide-react";
-import {
-  getPatient,
-  getDepartments,
-  getStaff,
-  type PatientRecord,
-} from "../../lib/api";
 
-const CTAS_LABELS: Record<number, string> = {
-  1: "Resuscitation",
-  2: "Emergent",
-  3: "Urgent",
-  4: "Less Urgent",
-  5: "Non-Urgent",
-};
+function ctasToSeverity(ctas: number | null): string {
+  switch (ctas) {
+    case 1: return "Resuscitation";
+    case 2: return "Critical";
+    case 3: return "Urgent";
+    case 4: return "Semi-Urgent";
+    case 5: return "Non-Urgent";
+    default: return "Unknown";
+  }
+}
 
-const STATUS_LABELS: Record<string, string> = {
-  waiting: "Waiting",
-  routed: "Routed",
-  in_progress: "In Progress",
-  discharged: "Discharged",
-};
+function ctasSeverityColor(ctas: number | null): "destructive" | "default" | "secondary" | "outline" {
+  switch (ctas) {
+    case 1:
+    case 2: return "destructive";
+    case 3: return "default";
+    case 4: return "secondary";
+    default: return "outline";
+  }
+}
 
-function ctasBadgeVariant(
-  level: number | null,
-): "destructive" | "default" | "secondary" | "outline" {
-  if (!level) return "outline";
-  if (level <= 2) return "destructive";
-  if (level === 3) return "default";
-  return "secondary";
+function getWaitTime(createdAt: string) {
+  const arrival = new Date(createdAt + "Z");
+  const now = new Date();
+  const diffMinutes = Math.floor((now.getTime() - arrival.getTime()) / 60000);
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
 }
 
 export default function PatientDetails() {
   const { patientId } = useParams();
+  const navigate = useNavigate();
   const [patient, setPatient] = useState<PatientRecord | null>(null);
-  const [deptName, setDeptName] = useState<string | null>(null);
-  const [doctorName, setDoctorName] = useState<string | null>(null);
+  const [routing, setRouting] = useState<RoutingDecision | null>(null);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!patientId) return;
-    (async () => {
-      try {
-        const p = await getPatient(patientId);
+    setLoading(true);
+    Promise.all([
+      getPatient(patientId),
+      getRouting(patientId).catch(() => null),
+      getDepartments(),
+    ])
+      .then(([p, r, d]) => {
         setPatient(p);
-        const [depts, staff] = await Promise.all([
-          getDepartments(),
-          getStaff(),
-        ]);
-        if (p.department_id) {
-          const dept = depts.find(
-            (d: { id: string; name: string }) => d.id === p.department_id,
-          );
-          setDeptName(dept?.name ?? p.department_id);
-        }
-        if (p.assigned_doctor_id) {
-          const doc = staff.find(
-            (s: { id: string; name: string }) => s.id === p.assigned_doctor_id,
-          );
-          setDoctorName(doc?.name ?? p.assigned_doctor_id);
-        }
-      } catch {
-        setNotFound(true);
-      } finally {
-        setLoading(false);
-      }
-    })();
+        setRouting(r);
+        setDepartments(d);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   }, [patientId]);
-
-  const getWaitTime = (createdAt: string) => {
-    const arrival = new Date(createdAt);
-    const now = new Date();
-    const diffMinutes = Math.floor((now.getTime() - arrival.getTime()) / 60000);
-    const hours = Math.floor(diffMinutes / 60);
-    const minutes = diffMinutes % 60;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
-  };
 
   if (loading) {
     return (
-      <div className="flex justify-center py-24">
-        <Loader2 className="size-8 animate-spin text-blue-600" />
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="size-8 animate-spin text-slate-400" />
       </div>
     );
   }
 
-  if (notFound || !patient) {
+  if (error || !patient) {
     return (
       <div className="max-w-4xl mx-auto">
         <Card>
           <CardContent className="py-12 text-center">
             <AlertCircle className="size-12 text-slate-400 mx-auto mb-3" />
-            <h3 className="font-semibold text-slate-900 mb-1">
-              Patient not found
-            </h3>
+            <h3 className="font-semibold text-slate-900 mb-1">Patient not found</h3>
             <p className="text-slate-600 mb-4">
-              The patient with ID {patientId} could not be found.
+              {error || `The patient with ID ${patientId} could not be found.`}
             </p>
             <Link to="/queue">
               <Button>
@@ -128,16 +109,13 @@ export default function PatientDetails() {
     );
   }
 
-  const structured = patient.structured_symptoms as Record<
-    string,
-    unknown
-  > | null;
-  const chiefComplaint = structured?.chief_complaint as string | undefined;
-  const symptoms = structured?.symptoms as string[] | undefined;
-  const relevantHistory = structured?.relevant_history as string | undefined;
-  const severityIndicators = structured?.severity_indicators as
-    | string[]
-    | undefined;
+  const structured = patient.structured_symptoms as Record<string, unknown> | null;
+  const symptoms = (structured?.symptoms as string[]) || [];
+  const chiefComplaint = (structured?.chief_complaint as string) || patient.raw_symptoms;
+  const severityIndicators = (structured?.severity_indicators as string[]) || [];
+  const vitalConcerns = (structured?.vital_concerns as string[]) || [];
+  const relevantHistory = (structured?.relevant_history as string) || "None reported";
+  const deptMap = Object.fromEntries(departments.map((d) => [d.id, d.name]));
 
   return (
     <div className="space-y-6">
@@ -155,32 +133,29 @@ export default function PatientDetails() {
               <h1 className="text-2xl font-semibold text-slate-900">
                 {patient.name}
               </h1>
-              {patient.ctas_level && (
-                <Badge variant={ctasBadgeVariant(patient.ctas_level)}>
-                  CTAS {patient.ctas_level} — {CTAS_LABELS[patient.ctas_level]}
-                </Badge>
-              )}
-              <Badge variant="outline">
-                {STATUS_LABELS[patient.status] ?? patient.status}
+              <Badge variant={ctasSeverityColor(patient.ctas_level)}>
+                CTAS {patient.ctas_level} — {ctasToSeverity(patient.ctas_level)}
               </Badge>
+              <Badge variant="outline" className="capitalize">{patient.status}</Badge>
             </div>
-            <p className="text-slate-600 text-sm font-mono">ID: {patient.id}</p>
+            <p className="text-slate-600">
+              {patient.health_number} &middot; {patient.age} years &middot;{" "}
+              {patient.gender}
+            </p>
           </div>
         </div>
       </div>
 
       {/* Critical Alert */}
-      {patient.ctas_level === 1 && (
+      {patient.ctas_level && patient.ctas_level <= 2 && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-start gap-3">
             <AlertTriangle className="size-5 text-red-600 mt-0.5" />
             <div>
               <h3 className="font-semibold text-red-900 mb-1">
-                Critical Patient — Immediate Attention Required
+                {patient.ctas_level === 1 ? "RESUSCITATION" : "Critical Patient"} — Immediate Attention Required
               </h3>
-              {chiefComplaint && (
-                <p className="text-sm text-red-800">{chiefComplaint}</p>
-              )}
+              <p className="text-sm text-red-800">{chiefComplaint}</p>
             </div>
           </div>
         </div>
@@ -197,25 +172,26 @@ export default function PatientDetails() {
               Clinical Assessment
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             <p className="text-slate-700">{patient.ai_summary}</p>
-            {deptName && (
-              <div className="flex items-center gap-2 pt-3 mt-3 border-t border-blue-200">
+            <div className="flex items-center gap-4 pt-2 border-t border-blue-200">
+              <div className="flex items-center gap-2">
                 <Stethoscope className="size-4 text-blue-700" />
                 <span className="text-sm font-medium text-slate-700">
                   Recommended Department:
                 </span>
-                <Badge>{deptName}</Badge>
+                <Badge variant="default">
+                  {deptMap[patient.department_id || ""] || patient.department_id}
+                </Badge>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column */}
+        {/* Left Column - Patient Info */}
         <div className="space-y-6">
-          {/* Patient Info */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -224,32 +200,21 @@ export default function PatientDetails() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {patient.health_number && (
-                <div>
-                  <p className="text-sm text-slate-600">Health Number</p>
-                  <p className="font-medium text-slate-900">
-                    {patient.health_number}
-                  </p>
-                </div>
-              )}
-              {patient.age && (
-                <div>
-                  <p className="text-sm text-slate-600">Age</p>
-                  <p className="font-medium text-slate-900">
-                    {patient.age} years
-                  </p>
-                </div>
-              )}
-              {patient.gender && (
-                <div>
-                  <p className="text-sm text-slate-600">Gender</p>
-                  <p className="font-medium text-slate-900">{patient.gender}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-sm text-slate-600">Health Number</p>
+                <p className="font-medium text-slate-900">{patient.health_number}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-600">Age</p>
+                <p className="font-medium text-slate-900">{patient.age} years</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-600">Gender</p>
+                <p className="font-medium text-slate-900 capitalize">{patient.gender}</p>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Visit Info */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -261,7 +226,7 @@ export default function PatientDetails() {
               <div>
                 <p className="text-sm text-slate-600">Arrival Time</p>
                 <p className="font-medium text-slate-900">
-                  {new Date(patient.created_at).toLocaleString()}
+                  {new Date(patient.created_at + "Z").toLocaleString()}
                 </p>
               </div>
               <div>
@@ -270,81 +235,80 @@ export default function PatientDetails() {
                   {getWaitTime(patient.created_at)}
                 </p>
               </div>
-              {deptName && (
+              <div>
+                <p className="text-sm text-slate-600">Status</p>
+                <Badge variant="outline" className="capitalize">{patient.status}</Badge>
+              </div>
+              {patient.department_id && (
                 <div>
-                  <p className="text-sm text-slate-600">Assigned Department</p>
-                  <p className="font-medium text-slate-900">{deptName}</p>
+                  <p className="text-sm text-slate-600">Department</p>
+                  <p className="font-medium text-slate-900">
+                    {deptMap[patient.department_id] || patient.department_id}
+                  </p>
                 </div>
               )}
-              {doctorName && (
-                <div>
-                  <p className="text-sm text-slate-600">Assigned Doctor</p>
-                  <p className="font-medium text-slate-900">{doctorName}</p>
+            </CardContent>
+          </Card>
+
+          {/* Symptoms Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Chief Complaint & Symptoms</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-slate-900 font-medium">{chiefComplaint}</p>
+              {symptoms.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {symptoms.map((s, i) => (
+                    <Badge key={i} variant="secondary">{s}</Badge>
+                  ))}
                 </div>
               )}
+              {severityIndicators.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-red-700 mb-1">Severity Indicators:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {severityIndicators.map((s, i) => (
+                      <Badge key={i} variant="destructive">{s}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {vitalConcerns.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-red-700 mb-1">Vital Concerns:</p>
+                  <ul className="text-sm text-red-800 list-disc list-inside">
+                    {vitalConcerns.map((c, i) => (
+                      <li key={i}>{c}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div>
+                <p className="text-sm text-slate-600">Medical History:</p>
+                <p className="text-sm text-slate-900">{relevantHistory}</p>
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Right Column */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Current Visit */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Current Visit</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {chiefComplaint && (
-                <div>
-                  <p className="text-sm text-slate-600 mb-1">Chief Complaint</p>
-                  <p className="font-medium text-slate-900">{chiefComplaint}</p>
-                </div>
-              )}
-              {symptoms && symptoms.length > 0 && (
-                <div>
-                  <p className="text-sm text-slate-600 mb-2">
-                    Reported Symptoms
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {symptoms.map((s, i) => (
-                      <Badge key={i} variant="secondary">
-                        {s}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {severityIndicators && severityIndicators.length > 0 && (
-                <div>
-                  <p className="text-sm text-slate-600 mb-2">
-                    Severity Indicators
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {severityIndicators.map((s, i) => (
-                      <Badge key={i} variant="destructive">
-                        {s}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {!chiefComplaint && patient.raw_symptoms && (
-                <div>
-                  <p className="text-sm text-slate-600 mb-1">Raw Symptoms</p>
-                  <p className="text-slate-900">{patient.raw_symptoms}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Medical History */}
-          {relevantHistory && (
+        {/* Right Column - Routing Decision */}
+        <div className="lg:col-span-2">
+          {routing ? (
+            <RoutingDecisionPanel
+              patientId={patient.id}
+              routing={routing}
+              departments={departments}
+              onRouted={() => {
+                // Refresh patient data
+                getPatient(patient.id).then(setPatient);
+              }}
+            />
+          ) : (
             <Card>
-              <CardHeader>
-                <CardTitle>Relevant Medical History</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-slate-700">{relevantHistory}</p>
+              <CardContent className="py-12 text-center">
+                <AlertCircle className="size-12 text-slate-400 mx-auto mb-3" />
+                <p className="text-slate-600">No routing decision available</p>
               </CardContent>
             </Card>
           )}

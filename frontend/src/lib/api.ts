@@ -67,6 +67,55 @@ export async function getStaff(onShift?: boolean) {
   return res.json();
 }
 
+export interface DepartmentScore {
+  department_id: string;
+  score: number;
+  reasoning: string;
+}
+
+export interface RoutingDecision {
+  id: string;
+  patient_id: string;
+  recommended_dept_id: string | null;
+  recommended_doctor_id: string | null;
+  ai_reasoning: string | null;
+  confidence: number | null;
+  department_scores: DepartmentScore[] | null;
+  confirmed: boolean;
+  override_dept_id: string | null;
+  override_doctor_id: string | null;
+  created_at: string;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  capacity: number;
+  current_load: number;
+}
+
+export interface StaffMember {
+  id: string;
+  name: string;
+  role: string;
+  department_id: string | null;
+  specialization: string | null;
+  on_shift: boolean;
+  current_patient_count: number;
+}
+
+export async function getRouting(patientId: string): Promise<RoutingDecision> {
+  const res = await fetch(`${API_URL}/routing/${patientId}`);
+  if (!res.ok) throw new Error("No routing decision found");
+  return res.json();
+}
+
+export async function getStaffByDepartment(departmentId: string): Promise<StaffMember[]> {
+  const res = await fetch(`${API_URL}/staff?on_shift=true&department_id=${departmentId}`);
+  if (!res.ok) throw new Error("Failed to load staff");
+  return res.json();
+}
+
 export async function confirmRouting(
   patientId: string,
   confirmed: boolean,
