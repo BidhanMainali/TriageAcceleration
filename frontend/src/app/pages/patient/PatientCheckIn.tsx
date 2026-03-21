@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { submitIntake } from "../../../lib/api";
 import { useNavigate } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
@@ -69,15 +70,46 @@ export default function PatientCheckIn() {
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    
-    // Simulate AI processing
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    // Generate a patient ID
-    const patientId = `P${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
-    
-    // Navigate to status page with the new patient ID
-    navigate(`/patient/status?id=${patientId}&new=true`);
+
+    // Calculate age from date of birth
+    const dob = new Date(formData.dateOfBirth);
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    if (
+      today.getMonth() < dob.getMonth() ||
+      (today.getMonth() === dob.getMonth() && today.getDate() < dob.getDate())
+    ) {
+      age--;
+    }
+
+    // Build a natural language symptoms string for the AI pipeline
+    const rawSymptomsParts = [
+      formData.chiefComplaint,
+      formData.symptoms.length > 0
+        ? `Symptoms: ${formData.symptoms.join(", ")}.`
+        : "",
+      formData.symptomDetails || "",
+      formData.allergies ? `Allergies: ${formData.allergies}.` : "",
+      formData.currentMedications
+        ? `Current medications: ${formData.currentMedications}.`
+        : "",
+    ].filter(Boolean);
+
+    try {
+      const patient = await submitIntake({
+        name: formData.fullName,
+        gender: formData.gender,
+        health_number: formData.healthNumber,
+        age,
+        raw_symptoms: rawSymptomsParts.join(" "),
+      });
+
+      navigate(`/patient/status?id=${patient.id}&new=true`);
+    } catch (err) {
+      console.error("Intake failed:", err);
+      alert("Something went wrong during check-in. Please try again.");
+      setIsSubmitting(false);
+    }
   };
 
   const canProceedStep1 = formData.fullName && formData.dateOfBirth && formData.gender && formData.healthNumber && formData.contactNumber;
