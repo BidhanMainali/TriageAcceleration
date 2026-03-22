@@ -63,6 +63,14 @@ def confirm_route(route_in: RouteConfirmIn):
         final_dept = route_in.override_dept_id or routing["recommended_dept_id"]
         final_doctor = route_in.override_doctor_id or routing["recommended_doctor_id"]
 
+        # Get current patient assignment to adjust loads
+        patient_row = db.execute(
+            "SELECT department_id, assigned_doctor_id FROM patients WHERE id = ?",
+            (route_in.patient_id,),
+        ).fetchone()
+        current_dept = patient_row["department_id"] if patient_row else None
+        current_doctor = patient_row["assigned_doctor_id"] if patient_row else None
+
         db.execute(
             """
             UPDATE routing_decisions
@@ -76,6 +84,32 @@ def confirm_route(route_in: RouteConfirmIn):
                 routing["id"],
             ),
         )
+
+        # Update department loads when department changes
+        if final_dept != current_dept:
+            if current_dept:
+                db.execute(
+                    "UPDATE departments SET current_load = MAX(0, current_load - 1) WHERE id = ?",
+                    (current_dept,),
+                )
+            if final_dept:
+                db.execute(
+                    "UPDATE departments SET current_load = current_load + 1 WHERE id = ?",
+                    (final_dept,),
+                )
+
+        # Update doctor patient counts when doctor changes
+        if final_doctor != current_doctor:
+            if current_doctor:
+                db.execute(
+                    "UPDATE staff SET current_patient_count = MAX(0, current_patient_count - 1) WHERE id = ?",
+                    (current_doctor,),
+                )
+            if final_doctor:
+                db.execute(
+                    "UPDATE staff SET current_patient_count = current_patient_count + 1 WHERE id = ?",
+                    (final_doctor,),
+                )
 
         db.execute(
             """
