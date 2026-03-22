@@ -1,7 +1,7 @@
 import json
 from fastapi import APIRouter, HTTPException
 from typing import List, Optional
-from models import PatientOut
+from models import PatientOut, StatusUpdateIn
 from database import get_db
 
 router = APIRouter()
@@ -51,20 +51,16 @@ def get_patient(patient_id: str):
 
 
 @router.patch("/patients/{patient_id}/status")
-def update_status(patient_id: str, status: str):
+def update_status(patient_id: str, body: StatusUpdateIn):
     """Update patient status: waiting | routed | in_progress | discharged"""
-    valid = {"waiting", "routed", "in_progress", "discharged"}
-    if status not in valid:
-        raise HTTPException(status_code=400, detail=f"Status must be one of {valid}")
-
     db = get_db()
     try:
         result = db.execute(
-            "UPDATE patients SET status = ? WHERE id = ?", (status, patient_id)
+            "UPDATE patients SET status = ? WHERE id = ?", (body.status, patient_id)
         )
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Patient not found")
         db.commit()
-        return {"patient_id": patient_id, "status": status}
+        return {"patient_id": patient_id, "status": body.status}
     finally:
         db.close()

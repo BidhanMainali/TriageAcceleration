@@ -18,6 +18,18 @@ def intake(patient_in: PatientIn):
     patient_id = str(uuid.uuid4())
     db = get_db()
     try:
+        # Check for existing active patient with the same health number
+        existing = db.execute(
+            "SELECT id FROM patients WHERE health_number = ? AND status != 'discharged'",
+            (patient_in.health_number,),
+        ).fetchone()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail="A patient with this health number is already in the system. "
+                       "Please check your queue status instead.",
+            )
+
         departments = [dict(r) for r in db.execute("SELECT * FROM departments").fetchall()]
         doctors = [
             dict(r) for r in db.execute(

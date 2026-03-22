@@ -74,7 +74,7 @@ export default function PatientQueue() {
     const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.health_number.toLowerCase().includes(searchQuery.toLowerCase());
+      (p.health_number || "").toLowerCase().includes(searchQuery.toLowerCase());
 
     const severity = ctasToSeverity(p.ctas_level);
     const matchesSeverity = severityFilter === "all" || severity === severityFilter;

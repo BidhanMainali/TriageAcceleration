@@ -69,17 +69,14 @@ export default function PatientCheckIn() {
   };
 
   const handleSubmit = async () => {
+    if (!canProceedStep1 || !canProceedStep2) return;
     setIsSubmitting(true);
 
-    // Calculate age from date of birth
-    const dob = new Date(formData.dateOfBirth);
-    const today = new Date();
-    let age = today.getFullYear() - dob.getFullYear();
-    if (
-      today.getMonth() < dob.getMonth() ||
-      (today.getMonth() === dob.getMonth() && today.getDate() < dob.getDate())
-    ) {
-      age--;
+    const age = getAge(formData.dateOfBirth);
+    if (age < 0 || age > 150) {
+      alert("Invalid date of birth. Please go back and correct it.");
+      setIsSubmitting(false);
+      return;
     }
 
     // Build a natural language symptoms string for the AI pipeline
@@ -112,7 +109,49 @@ export default function PatientCheckIn() {
     }
   };
 
-  const canProceedStep1 = formData.fullName && formData.dateOfBirth && formData.gender && formData.healthNumber && formData.contactNumber;
+  const getAge = (dob: string): number => {
+    if (!dob) return -1;
+    const dobDate = new Date(dob);
+    const today = new Date();
+    if (dobDate > today) return -1;
+    let age = today.getFullYear() - dobDate.getFullYear();
+    if (
+      today.getMonth() < dobDate.getMonth() ||
+      (today.getMonth() === dobDate.getMonth() && today.getDate() < dobDate.getDate())
+    ) {
+      age--;
+    }
+    return age;
+  };
+
+  const dobAge = getAge(formData.dateOfBirth);
+  const isDobValid = formData.dateOfBirth !== "" && dobAge >= 0 && dobAge <= 150;
+  const dobError = formData.dateOfBirth
+    ? dobAge < 0
+      ? "Date of birth cannot be in the future"
+      : dobAge > 150
+        ? "Please enter a valid date of birth"
+        : ""
+    : "";
+
+  const isNameValid = formData.fullName.trim().length >= 2 && /^[a-zA-Z\s'-]+$/.test(formData.fullName.trim());
+  const nameError = formData.fullName && !isNameValid
+    ? formData.fullName.trim().length < 2
+      ? "Name must be at least 2 characters"
+      : "Name can only contain letters, spaces, hyphens, and apostrophes"
+    : "";
+
+  const isPhoneValid = /^\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}$/.test(formData.contactNumber.trim());
+  const phoneError = formData.contactNumber && !isPhoneValid
+    ? "Enter a valid 10-digit phone number"
+    : "";
+
+  const isHealthNumberValid = formData.healthNumber.trim().length >= 5;
+  const healthNumberError = formData.healthNumber && !isHealthNumberValid
+    ? "Health number must be at least 5 characters"
+    : "";
+
+  const canProceedStep1 = isNameValid && isDobValid && formData.gender && isHealthNumberValid && isPhoneValid;
   const canProceedStep2 = formData.chiefComplaint && formData.symptoms.length > 0;
 
   return (
@@ -179,6 +218,7 @@ export default function PatientCheckIn() {
                     value={formData.fullName}
                     onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                   />
+                  {nameError && <p className="text-sm text-red-600 mt-1">{nameError}</p>}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -187,9 +227,11 @@ export default function PatientCheckIn() {
                     <Input
                       id="dob"
                       type="date"
+                      max={new Date().toISOString().split("T")[0]}
                       value={formData.dateOfBirth}
                       onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
                     />
+                    {dobError && <p className="text-sm text-red-600 mt-1">{dobError}</p>}
                   </div>
 
                   <div>
@@ -215,6 +257,7 @@ export default function PatientCheckIn() {
                     value={formData.healthNumber}
                     onChange={(e) => setFormData({ ...formData, healthNumber: e.target.value })}
                   />
+                  {healthNumberError && <p className="text-sm text-red-600 mt-1">{healthNumberError}</p>}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -227,6 +270,7 @@ export default function PatientCheckIn() {
                       value={formData.contactNumber}
                       onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
                     />
+                    {phoneError && <p className="text-sm text-red-600 mt-1">{phoneError}</p>}
                   </div>
 
                   <div>

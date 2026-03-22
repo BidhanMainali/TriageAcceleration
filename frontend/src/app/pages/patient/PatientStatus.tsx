@@ -111,7 +111,7 @@ export default function PatientStatus() {
   }, [searchedId]);
 
   const getWaitTime = (createdAt: string) => {
-    const arrival = new Date(createdAt);
+    const arrival = new Date(createdAt + "Z");
     const now = new Date();
     const diffMinutes = Math.floor((now.getTime() - arrival.getTime()) / 60000);
     const hours = Math.floor(diffMinutes / 60);
@@ -174,7 +174,7 @@ export default function PatientStatus() {
                     placeholder="e.g., 5943f973-c0f0-4177-a780-afc8b72893d1"
                     value={patientId}
                     onChange={(e) => setPatientId(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                   />
                   <Button onClick={handleSearch} disabled={loading}>
                     {loading ? (
@@ -267,7 +267,7 @@ export default function PatientStatus() {
                       {getWaitTime(patient.created_at)}
                     </p>
                     <p className="text-xs text-slate-600 mt-1">
-                      Since {new Date(patient.created_at).toLocaleTimeString()}
+                      Since {new Date(patient.created_at + "Z").toLocaleTimeString()}
                     </p>
                   </div>
 
