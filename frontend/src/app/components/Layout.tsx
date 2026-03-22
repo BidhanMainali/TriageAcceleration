@@ -22,7 +22,7 @@ export default function Layout() {
                 <Activity className="size-6 text-white" />
               </div>
               <div>
-                <h1 className="font-semibold text-slate-900">Hospital Management System</h1>
+                <h1 className="font-semibold text-slate-900">TriageAssist</h1>
                 <p className="text-sm text-slate-600">Doctor Portal</p>
               </div>
             </div>
