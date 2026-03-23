@@ -44,6 +44,8 @@ def init_db():
             ai_summary TEXT,
             department_id TEXT,
             assigned_doctor_id TEXT,
+            emergency_contact_name TEXT,
+            emergency_contact_number TEXT,
             status TEXT DEFAULT 'waiting',
             created_at TEXT DEFAULT (datetime('now'))
         );
@@ -69,6 +71,13 @@ def init_db():
         conn.commit()
     except sqlite3.OperationalError:
         pass  # Column already exists
+
+    for col in ("emergency_contact_name", "emergency_contact_number"):
+        try:
+            cur.execute(f"ALTER TABLE patients ADD COLUMN {col} TEXT")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
     conn.commit()
     conn.close()

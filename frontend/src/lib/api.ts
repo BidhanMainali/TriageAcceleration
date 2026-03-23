@@ -6,6 +6,8 @@ export interface IntakePayload {
   health_number: string;
   age: number;
   raw_symptoms: string;
+  emergency_contact_name?: string;
+  emergency_contact_number?: string;
 }
 
 export interface PatientRecord {
@@ -18,6 +20,8 @@ export interface PatientRecord {
   structured_symptoms: Record<string, unknown> | null;
   ctas_level: number | null;
   ai_summary: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_number: string | null;
   department_id: string | null;
   assigned_doctor_id: string | null;
   status: string;

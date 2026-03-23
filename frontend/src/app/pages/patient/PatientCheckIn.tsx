@@ -46,7 +46,10 @@ export default function PatientCheckIn() {
     gender: "",
     healthNumber: "",
     contactNumber: "",
+
     emergencyContact: "",
+    emergencyNumber: "",
+    emergencyRelations: "",
     bloodType: "",
 
     // Medical Info
@@ -99,6 +102,8 @@ export default function PatientCheckIn() {
         health_number: formData.healthNumber,
         age,
         raw_symptoms: rawSymptomsParts.join(" "),
+        emergency_contact_name: formData.emergencyContact || undefined,
+        emergency_contact_number: formData.emergencyNumber || undefined,
       });
 
       navigate(`/patient/status?id=${patient.id}&new=true`);
@@ -274,12 +279,22 @@ export default function PatientCheckIn() {
                   </div>
 
                   <div>
-                    <Label htmlFor="emergency">Emergency Contact</Label>
+                    <Label htmlFor="emergency">Emergency Contact Name</Label>
                     <Input
                       id="emergency"
-                      placeholder="Name & Number"
+                      placeholder="e.g., Jane Doe"
                       value={formData.emergencyContact}
                       onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="emergencyNum">Emergency Contact Number</Label>
+                    <Input
+                      id="emergencyNum"
+                      type="tel"
+                      placeholder="(604) 555-0123"
+                      value={formData.emergencyNumber}
+                      onChange={(e) => setFormData({ ...formData, emergencyNumber: e.target.value })}
                     />
                   </div>
                 </div>
@@ -414,6 +429,9 @@ export default function PatientCheckIn() {
                     <p><span className="font-medium">Contact:</span> {formData.contactNumber}</p>
                     {formData.emergencyContact && (
                       <p><span className="font-medium">Emergency Contact:</span> {formData.emergencyContact}</p>
+                    )}
+                    {formData.emergencyNumber && (
+                      <p><span className="font-medium">Emergency Number:</span> {formData.emergencyNumber}</p>
                     )}
                     {formData.bloodType && (
                       <p><span className="font-medium">Blood Type:</span> {formData.bloodType}</p>
