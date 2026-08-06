@@ -26,6 +26,8 @@ class PatientIn(BaseModel):
     health_number: str
     age: int
     raw_symptoms: str
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_number: Optional[str] = None
 
     @field_validator("name")
     @classmethod
@@ -93,6 +95,8 @@ class PatientOut(BaseModel):
     structured_symptoms: Optional[Any] = None
     ctas_level: Optional[int] = None
     ai_summary: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_number: Optional[str] = None
     department_id: Optional[str] = None
     assigned_doctor_id: Optional[str] = None
     status: str

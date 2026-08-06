@@ -60,14 +60,17 @@ def intake(patient_in: PatientIn):
             INSERT INTO patients
               (id, name, gender, health_number, age, raw_symptoms,
                structured_symptoms, ctas_level, ai_summary,
-               department_id, assigned_doctor_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               department_id, assigned_doctor_id,
+               emergency_contact_name, emergency_contact_number)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 patient_id, patient_in.name, patient_in.gender,
                 patient_in.health_number, patient_in.age,
                 patient_in.raw_symptoms, structured_json,
                 ctas, summary, dept_id, doctor_id,
+                patient_in.emergency_contact_name,
+                patient_in.emergency_contact_number,
             ),
         )
 
