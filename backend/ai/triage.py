@@ -1,14 +1,7 @@
 import json
-import re
-import anthropic
+
 from .prompts import TRIAGE_SYSTEM, TRIAGE_USER
-
-
-def _parse_json(text: str) -> dict:
-    text = text.strip()
-    text = re.sub(r"^```(?:json)?\s*", "", text)
-    text = re.sub(r"\s*```$", "", text)
-    return json.loads(text.strip())
+from .utils import request_json
 
 
 def run_triage(
@@ -20,8 +13,6 @@ def run_triage(
     doctors: list,
 ) -> dict:
     """Stage 2: structured symptoms → CTAS level + routing recommendation."""
-    client = anthropic.Anthropic()
-
     dept_str = json.dumps([
         {
             "id": d["id"],
@@ -43,26 +34,20 @@ def run_triage(
         for d in doctors
     ], indent=2)
 
-    message = client.messages.create(
-        model="claude-opus-4-6",
-        max_tokens=4096,
+    return request_json(
         system=TRIAGE_SYSTEM,
-        messages=[{
-            "role": "user",
-            "content": TRIAGE_USER.format(
-                name=name,
-                age=age,
-                gender=gender,
-                chief_complaint=structured.get("chief_complaint", ""),
-                symptoms=", ".join(structured.get("symptoms", [])),
-                symptom_duration=structured.get("symptom_duration", "unknown"),
-                severity_indicators=", ".join(structured.get("severity_indicators", [])),
-                vital_concerns=", ".join(structured.get("vital_concerns", [])),
-                relevant_history=structured.get("relevant_history", "none reported"),
-                departments=dept_str,
-                doctors=doc_str,
-            )
-        }]
+        user=TRIAGE_USER.format(
+            name=name,
+            age=age,
+            gender=gender,
+            chief_complaint=structured.get("chief_complaint", ""),
+            symptoms=", ".join(structured.get("symptoms", [])),
+            symptom_duration=structured.get("symptom_duration", "unknown"),
+            severity_indicators=", ".join(structured.get("severity_indicators", [])),
+            vital_concerns=", ".join(structured.get("vital_concerns", [])),
+            relevant_history=structured.get("relevant_history", "none reported"),
+            departments=dept_str,
+            doctors=doc_str,
+        ),
+        max_tokens=4096,
     )
-
-    return _parse_json(message.content[0].text)

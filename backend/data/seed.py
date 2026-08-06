@@ -318,19 +318,22 @@ def seed():
         )
 
     for p in DEMO_PATIENTS:
+        # High-acuity cases (CTAS 1-2) are flagged for mandatory nurse review.
+        requires_confirmation = 1 if p["ctas_level"] <= 2 else 0
         db.execute(
             """
             INSERT OR IGNORE INTO patients
               (id, name, gender, health_number, age, raw_symptoms,
                structured_symptoms, ctas_level, ai_summary,
-               department_id, assigned_doctor_id, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               department_id, assigned_doctor_id, requires_confirmation,
+               status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 p["id"], p["name"], p["gender"], p["health_number"], p["age"],
                 p["raw_symptoms"], p["structured_symptoms"], p["ctas_level"],
                 p["ai_summary"], p["department_id"], p["assigned_doctor_id"],
-                p["status"], p["created_at"],
+                requires_confirmation, p["status"], p["created_at"],
             ),
         )
 

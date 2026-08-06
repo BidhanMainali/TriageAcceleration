@@ -8,7 +8,9 @@ from database import get_db
 def _parse_routing_row(row) -> dict:
     """Convert a routing_decisions DB row to a dict with parsed fields."""
     r = dict(row)
-    r["confirmed"] = bool(r["confirmed"])
+    for key in ("confirmed", "safety_override", "requires_confirmation"):
+        if r.get(key) is not None:
+            r[key] = bool(r[key])
     if r.get("department_scores"):
         r["department_scores"] = json.loads(r["department_scores"])
     return r
@@ -71,16 +73,22 @@ def confirm_route(route_in: RouteConfirmIn):
         current_dept = patient_row["department_id"] if patient_row else None
         current_doctor = patient_row["assigned_doctor_id"] if patient_row else None
 
+        # A human has now reviewed this decision, so it no longer needs
+        # confirmation. Capture who/why/when for the audit trail.
         db.execute(
             """
             UPDATE routing_decisions
-            SET confirmed = ?, override_dept_id = ?, override_doctor_id = ?
+            SET confirmed = ?, override_dept_id = ?, override_doctor_id = ?,
+                override_reason = ?, overridden_by = ?,
+                overridden_at = datetime('now'), requires_confirmation = 0
             WHERE id = ?
             """,
             (
                 1 if route_in.confirmed else 0,
                 route_in.override_dept_id,
                 route_in.override_doctor_id,
+                route_in.override_reason,
+                route_in.overridden_by,
                 routing["id"],
             ),
         )
@@ -114,7 +122,8 @@ def confirm_route(route_in: RouteConfirmIn):
         db.execute(
             """
             UPDATE patients
-            SET department_id = ?, assigned_doctor_id = ?, status = 'routed'
+            SET department_id = ?, assigned_doctor_id = ?, status = 'routed',
+                requires_confirmation = 0
             WHERE id = ?
             """,
             (final_dept, final_doctor, route_in.patient_id),

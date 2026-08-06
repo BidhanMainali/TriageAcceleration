@@ -54,6 +54,7 @@ def intake(patient_in: PatientIn):
         dept_id = result.get("recommended_department_id")
         doctor_id = result.get("recommended_doctor_id")
         summary = result.get("clinical_summary", "")
+        requires_confirmation = 1 if result.get("requires_confirmation") else 0
 
         db.execute(
             """
@@ -61,8 +62,9 @@ def intake(patient_in: PatientIn):
               (id, name, gender, health_number, age, raw_symptoms,
                structured_symptoms, ctas_level, ai_summary,
                department_id, assigned_doctor_id,
-               emergency_contact_name, emergency_contact_number)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               emergency_contact_name, emergency_contact_number,
+               requires_confirmation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 patient_id, patient_in.name, patient_in.gender,
@@ -71,6 +73,7 @@ def intake(patient_in: PatientIn):
                 ctas, summary, dept_id, doctor_id,
                 patient_in.emergency_contact_name,
                 patient_in.emergency_contact_number,
+                requires_confirmation,
             ),
         )
 
@@ -81,14 +84,18 @@ def intake(patient_in: PatientIn):
             """
             INSERT INTO routing_decisions
               (id, patient_id, recommended_dept_id, recommended_doctor_id,
-               ai_reasoning, confidence, department_scores)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+               ai_reasoning, confidence, department_scores,
+               safety_override, safety_reason, requires_confirmation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 routing_id, patient_id, dept_id, doctor_id,
                 result.get("ai_reasoning", ""),
                 float(result.get("confidence", 0.0)),
                 dept_scores_json,
+                1 if result.get("safety_override") else 0,
+                result.get("safety_reason", ""),
+                requires_confirmation,
             ),
         )
 

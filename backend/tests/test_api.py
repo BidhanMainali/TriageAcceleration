@@ -251,6 +251,22 @@ class TestIntakeEndpoint:
         mock_pipeline.assert_called_once()
 
     @patch("routers.intake.run_pipeline")
+    def test_intake_persists_requires_confirmation(self, mock_pipeline, client):
+        """A pipeline result flagged for review is surfaced on the patient record."""
+        result = {**self.MOCK_PIPELINE_RESULT, "requires_confirmation": True,
+                  "safety_override": True, "safety_reason": "red-flag"}
+        mock_pipeline.return_value = result
+        res = client.post("/intake", json={
+            "name": "Flagged Patient",
+            "gender": "Male",
+            "health_number": "BC-7777-777-777",
+            "age": 60,
+            "raw_symptoms": "Chest pain radiating to arm",
+        })
+        assert res.status_code == 200
+        assert res.json()["requires_confirmation"] is True
+
+    @patch("routers.intake.run_pipeline")
     def test_intake_duplicate_health_number(self, mock_pipeline, client):
         """Patient with same health number as existing non-discharged patient should be rejected."""
         mock_pipeline.return_value = self.MOCK_PIPELINE_RESULT

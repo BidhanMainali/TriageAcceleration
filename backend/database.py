@@ -46,6 +46,7 @@ def init_db():
             assigned_doctor_id TEXT,
             emergency_contact_name TEXT,
             emergency_contact_number TEXT,
+            requires_confirmation INTEGER DEFAULT 0,
             status TEXT DEFAULT 'waiting',
             created_at TEXT DEFAULT (datetime('now'))
         );
@@ -58,23 +59,36 @@ def init_db():
             ai_reasoning TEXT,
             confidence REAL,
             department_scores TEXT,
+            safety_override INTEGER DEFAULT 0,
+            safety_reason TEXT,
+            requires_confirmation INTEGER DEFAULT 0,
             confirmed INTEGER DEFAULT 0,
             override_dept_id TEXT,
             override_doctor_id TEXT,
+            override_reason TEXT,
+            overridden_by TEXT,
+            overridden_at TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
     """)
 
-    # Migration for existing DBs
-    try:
-        cur.execute("ALTER TABLE routing_decisions ADD COLUMN department_scores TEXT")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-
-    for col in ("emergency_contact_name", "emergency_contact_number"):
+    # Migrations for existing DBs — each column added independently so a
+    # partially-migrated database still gets the rest.
+    migrations = [
+        ("routing_decisions", "department_scores", "TEXT"),
+        ("routing_decisions", "safety_override", "INTEGER DEFAULT 0"),
+        ("routing_decisions", "safety_reason", "TEXT"),
+        ("routing_decisions", "requires_confirmation", "INTEGER DEFAULT 0"),
+        ("routing_decisions", "override_reason", "TEXT"),
+        ("routing_decisions", "overridden_by", "TEXT"),
+        ("routing_decisions", "overridden_at", "TEXT"),
+        ("patients", "emergency_contact_name", "TEXT"),
+        ("patients", "emergency_contact_number", "TEXT"),
+        ("patients", "requires_confirmation", "INTEGER DEFAULT 0"),
+    ]
+    for table, column, coltype in migrations:
         try:
-            cur.execute(f"ALTER TABLE patients ADD COLUMN {col} TEXT")
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
             conn.commit()
         except sqlite3.OperationalError:
             pass  # Column already exists

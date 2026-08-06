@@ -99,6 +99,7 @@ class PatientOut(BaseModel):
     emergency_contact_number: Optional[str] = None
     department_id: Optional[str] = None
     assigned_doctor_id: Optional[str] = None
+    requires_confirmation: Optional[bool] = None
     status: str
     created_at: str
 
@@ -117,9 +118,15 @@ class RoutingDecisionOut(BaseModel):
     ai_reasoning: Optional[str] = None
     confidence: Optional[float] = None
     department_scores: Optional[List[DepartmentScore]] = None
+    safety_override: Optional[bool] = None
+    safety_reason: Optional[str] = None
+    requires_confirmation: Optional[bool] = None
     confirmed: bool
     override_dept_id: Optional[str] = None
     override_doctor_id: Optional[str] = None
+    override_reason: Optional[str] = None
+    overridden_by: Optional[str] = None
+    overridden_at: Optional[str] = None
     created_at: str
 
 
@@ -128,6 +135,8 @@ class RouteConfirmIn(BaseModel):
     confirmed: bool
     override_dept_id: Optional[str] = None
     override_doctor_id: Optional[str] = None
+    override_reason: Optional[str] = None
+    overridden_by: Optional[str] = None
 
 
 class FollowUpOut(BaseModel):
